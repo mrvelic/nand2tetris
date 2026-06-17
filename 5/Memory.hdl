@@ -1,7 +1,6 @@
 // This file is part of www.nand2tetris.org
 // and the book "The Elements of Computing Systems"
 // by Nisan and Schocken, MIT Press.
-// File name: projects/5/Memory.hdl
 /**
  * The complete address space of the Hack computer's memory,
  * including RAM and memory-mapped I/O. 
@@ -20,10 +19,19 @@
  * memory map. The behavior in these addresses is described in the Screen
  * and Keyboard chip specifications given in the lectures and the book.
  */
+
 CHIP Memory {
     IN in[16], load, address[15];
     OUT out[16];
 
     PARTS:
-	//// Replace this comment with your code.
+    DMux4Way(in=load, sel=address[13..14], a=loadRamLow, b=loadRamHigh, c=loadScreen, d=loadKB);
+    DMux(in=loadScreen, sel=address[12], a=loadScreenLow, b=loadScreenHigh);
+    Or(a=loadRamLow, b=loadRamHigh, out=loadRam);
+
+    RAM16K(in=in, load=loadRam, address=address[0..13], out=ramOut);
+    Screen(in=in , load=loadScreen, address=address[0..12], out=screenOut);
+    Keyboard(out=kbOut);
+
+    Mux4Way16(a=ramOut, b=ramOut, c=screenOut, d=kbOut, sel=address[13..14], out=out);
 }

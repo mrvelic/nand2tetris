@@ -1,7 +1,6 @@
 // This file is part of www.nand2tetris.org
 // and the book "The Elements of Computing Systems"
 // by Nisan and Schocken, MIT Press.
-// File name: projects/5/CPU.hdl
 /**
  * The Hack Central Processing unit (CPU).
  * Parses the binary code in the instruction input and executes it according to the
@@ -32,5 +31,70 @@ CHIP CPU {
         pc[15];          // address of next instruction
 
     PARTS:
-	//// Replace this comment with your code.
+
+    // instruction[15] - 0 when A, 1 when C
+    // instruction[12] - a - ALU Input - 0 when regA, 1 when inM
+
+    // instruction[11..6] - cccccc
+
+    // instruction[5] - d[2] if is 1 write to reg A
+    // instruction[4] - d[1] if is 1 write to reg D
+    // instruction[3] - d[0] if is 1 write RAM
+	
+    // regA loads the instruction when an A instruction
+    // regA loads the ALU output when a C instruction with d[2]=1
+    Not(in=instruction[15], out=notC);
+    Or(a=notC, b=instruction[5], out=regALoad); 
+    Mux16(a=aluOut, b=instruction, sel=notC, out=regAIn);
+
+    // regD should only load when a C instruction
+    // and when d[1]=1
+    And(a=instruction[4], b=instruction[15], out=regDLoad);
+
+    // writeM when C instruction and d[0]=1
+    And(a=instruction[3], b=instruction[15], out=writeM);
+
+    ARegister(in=regAIn, load=regALoad, out=regA, out[0..14]=addressM);
+    DRegister(in=regDIn, load=regDLoad, out=regD);
+
+    // ALU y input flips between regA value or inM
+    Mux16(a=regA, b=inM, sel=instruction[12], out=aluY);
+
+    ALU(
+        x=regD,
+        y=aluY,
+        zx=instruction[11],
+        nx=instruction[10],
+        zy=instruction[9],
+        ny=instruction[8],
+        f=instruction[7],
+        no=instruction[6],
+        out=aluOut,
+        out=regDIn,
+        out=outM,
+        zr=zr,
+        ng=ng
+    );
+
+    Not(in=zr, out=nzr); // non zero
+    Not(in=ng, out=nng); // non negative
+
+    // when can be non zero and positive
+    And(a=instruction[15], b=instruction[0], out=jgt);
+    And(a=nng, b=nzr, out=nngnzr);
+    And(a=jgt, b=nngnzr, out=doJmpGt);
+
+    // when can be equal to zero
+    And(a=instruction[15], b=instruction[1], out=jeq);
+    And(a=jeq, b=zr, out=doJmpEq);
+
+    // when can be non zero and negative
+    And(a=instruction[15], b=instruction[2], out=jlt);
+    And(a=jlt, b=ng, out=doJmpLt);
+
+    // 0 0 0 no jmp, any 1 jmp
+    Or(a=doJmpGt, b=doJmpEq, out=doJmpGtEq);
+    Or(a=doJmpLt, b=doJmpGtEq, out=doJmp);
+
+    PC(in=regA, reset=reset, load=doJmp, inc=true, out[0..14]=pc);
 }
