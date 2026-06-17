@@ -1,0 +1,8 @@
+[package]
+name = "assembler"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bitflags = { version = "2.13.0" }
+lazy_static = { version = "1.5.0" }
