@@ -63,7 +63,6 @@ fn generate_output(
         .open(output_file_path)?;
     let mut output_buf = std::io::BufWriter::new(output_file);
 
-    dbg!(&instructions);
     let opcodes = code::generate_opcodes(instructions)?;
     for opcode in opcodes {
         writeln!(&mut output_buf, "{:016b}", opcode)?;

@@ -8,7 +8,6 @@ const RAM_START: u16 = 16;
 pub fn generate_opcodes(instructions: &Vec<Instruction>) -> Result<Vec<u16>, MissingSymbolError> {
     // first pass: find all labels and non-base symbols
     let symbols = create_symbols(&instructions);
-    dbg!(&symbols);
 
     // now generate the code for each instruction
     let mut opcodes = Vec::<u16>::new();
