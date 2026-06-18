@@ -1,21 +1,6 @@
 use bitflags::bitflags;
 
 #[derive(Debug)]
-pub enum Instruction {
-    Addr {
-        symbol: String,
-    },
-    Label {
-        symbol: String,
-    },
-    Comp {
-        dest: DestFlags,
-        comp: CompFlags,
-        jump: JumpFlags,
-    },
-}
-
-#[derive(Debug)]
 pub struct DestFlags(u16);
 
 #[derive(Debug)]
@@ -65,59 +50,59 @@ bitflags! {
     impl CompFlags: u16 {
         // a = 0
         #[bitflags(flag_name = "0")]
-        const _0     = 0b101010;
+        const _0     = 0b10_1010;
         #[bitflags(flag_name = "1")]
-        const _1     = 0b111111;
+        const _1     = 0b11_1111;
         #[bitflags(flag_name = "-1")]
-        const Neg1   = 0b111010;
-        const D      = 0b001100;
-        const A      = 0b110000;
+        const Neg1   = 0b11_1010;
+        const D      = 0b00_1100;
+        const A      = 0b11_0000;
         #[bitflags(flag_name = "!D")]
-        const NotD   = 0b001101;
+        const NotD   = 0b00_1101;
         #[bitflags(flag_name = "!A")]
-        const NotA   = 0b110001;
+        const NotA   = 0b11_0001;
         #[bitflags(flag_name = "-D")]
-        const NegD   = 0b001111;
+        const NegD   = 0b00_1111;
         #[bitflags(flag_name = "-A")]
-        const NegA   = 0b110011;
+        const NegA   = 0b11_0011;
         #[bitflags(flag_name = "D+1")]
-        const DPlus1 = 0b011111;
+        const DPlus1 = 0b01_1111;
         #[bitflags(flag_name = "A+1")]
-        const APlus1 = 0b110111;
+        const APlus1 = 0b11_0111;
         #[bitflags(flag_name = "D-1")]
-        const DNeg1  = 0b001110;
+        const DNeg1  = 0b00_1110;
         #[bitflags(flag_name = "A-1")]
-        const ANeg1  = 0b110010;
+        const ANeg1  = 0b11_0010;
         #[bitflags(flag_name = "D+A")]
-        const DPlusA = 0b000010;
+        const DPlusA = 0b00_0010;
         #[bitflags(flag_name = "D-A")]
-        const DNegA  = 0b010011;
+        const DNegA  = 0b01_0011;
         #[bitflags(flag_name = "A-D")]
-        const ANegD  = 0b000111;
+        const ANegD  = 0b00_0111;
         #[bitflags(flag_name = "D&A")]
-        const DAndA  = 0b000000;
+        const DAndA  = 0b00_0000;
         #[bitflags(flag_name = "D|A")]
-        const DOrA   = 0b010101;
+        const DOrA   = 0b01_0101;
 
         // a = 1
-        const M      = 0b1110000;
+        const M      = 0b1_110000;
         #[bitflags(flag_name = "!M")]
-        const NotM   = 0b1110001;
+        const NotM   = 0b1_110001;
         #[bitflags(flag_name = "-M")]
-        const NegM   = 0b1110011;
+        const NegM   = 0b1_110011;
         #[bitflags(flag_name = "M+1")]
-        const MPlus1 = 0b1110111;
+        const MPlus1 = 0b1_110111;
         #[bitflags(flag_name = "M-1")]
-        const MNeg1  = 0b1110010;
+        const MNeg1  = 0b1_110010;
         #[bitflags(flag_name = "D+M")]
-        const DPlusM = 0b1000010;
+        const DPlusM = 0b1_000010;
         #[bitflags(flag_name = "D-M")]
-        const DNegM  = 0b1010011;
+        const DNegM  = 0b1_010011;
         #[bitflags(flag_name = "M-D")]
-        const MNegD  = 0b1000111;
+        const MNegD  = 0b1_000111;
         #[bitflags(flag_name = "D&M")]
-        const DAndM  = 0b1000000;
+        const DAndM  = 0b1_000000;
         #[bitflags(flag_name = "D|M")]
-        const DOrM   = 0b1010101;
+        const DOrM   = 0b1_010101;
     }
 }
