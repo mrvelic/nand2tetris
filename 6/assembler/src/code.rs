@@ -40,7 +40,8 @@ fn base_symbols() -> &'static HashMap<&'static str, u16> {
 
 pub fn generate_opcodes(instructions: &[Instruction]) -> Result<Vec<u16>> {
     // first pass: find all labels and non-base symbols
-    let symbols = create_symbols(instructions);
+    let mut symbols = extract_symbols(instructions);
+    symbols.extend(base_symbols());
 
     // now generate the code for each instruction
     let mut opcodes = Vec::<u16>::new();
@@ -54,18 +55,18 @@ pub fn generate_opcodes(instructions: &[Instruction]) -> Result<Vec<u16>> {
     Ok(opcodes)
 }
 
-fn create_symbols(instructions: &[Instruction]) -> HashMap<&str, u16> {
+fn extract_symbols(instructions: &[Instruction]) -> HashMap<&str, u16> {
     let mut symbols = HashMap::<&str, u16>::new();
     let mut ram_pos: u16 = RAM_START;
     let mut pc: u16 = 0; // program counter
 
-    let operators = instructions.iter().map(|i| &i.operator).collect::<Vec<_>>();
+    //let operators = instructions.iter().map(|i| &i.operator).collect::<Vec<_>>();
 
     // first pass: find all labels
-    for i in &operators {
+    for i in instructions {
         // labels point at the next instruction but are not instructions themselves
         // so do not increment the program counter
-        if let OperatorKind::Label { label: symbol } = i {
+        if let OperatorKind::Label { label: symbol } = &i.operator {
             if !symbols.contains_key(symbol.as_str()) {
                 symbols.insert(symbol, pc);
             }
@@ -75,8 +76,8 @@ fn create_symbols(instructions: &[Instruction]) -> HashMap<&str, u16> {
     }
 
     // second pass: find all variables (address instructions that dont reference a label or base symbol)
-    for i in &operators {
-        if let OperatorKind::Symbol { symbol } = i
+    for i in instructions {
+        if let OperatorKind::Symbol { symbol } = &i.operator
             && !base_symbols().contains_key(symbol.as_str())
             && !symbols.contains_key(symbol.as_str())
         {
@@ -85,6 +86,5 @@ fn create_symbols(instructions: &[Instruction]) -> HashMap<&str, u16> {
         }
     }
 
-    symbols.extend(base_symbols());
     symbols
 }

@@ -22,8 +22,8 @@ pub enum OperatorKind {
         label: String,
     },
     Comp {
-        dest: DestFlags,
         comp: CompFlags,
+        dest: DestFlags,
         jump: JumpFlags,
     },
 }

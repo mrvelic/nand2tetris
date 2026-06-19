@@ -1,0 +1,13 @@
+[unstable]
+build-std = ["std", "panic_abort", "core", "alloc"]
+
+[profile.release]
+# Do not perform backtrace for panic on release builds.
+#panic = 'immediate-abort'
+# Perform optimizations on all codegen units.
+codegen-units = 1
+# Optimize for size.
+opt-level = 's' # 's' for speed or 'z' to optimize "aggressively" for size
+# Enable link time optimization.
+lto = true
+strip = "debuginfo"

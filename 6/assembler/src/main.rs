@@ -4,20 +4,16 @@ mod code;
 mod instructions;
 mod parser;
 
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result};
 use std::env;
-use std::fs;
-use std::fs::OpenOptions;
-use std::io::BufWriter;
-use std::io::Write;
+use std::fs::{self, OpenOptions};
+use std::io::{BufWriter, Write};
 use std::path::PathBuf;
-
-use crate::instructions::Instruction;
 
 const INPUT_FILE_EXT: &str = "asm";
 const OUTPUT_FILE_EXT: &str = "hack";
 
-fn main() {
+fn main() -> Result<()> {
     let current_dir = env::current_dir().expect("Working directory should be accessible.");
     let asm_files = find_asm_files(current_dir)
         .expect("Working directory should be possible to enumerate.")
@@ -25,25 +21,35 @@ fn main() {
 
     for file_path in asm_files {
         println!("Assembling file: {}", file_path.display());
-        assemble_file(&file_path).unwrap_or_else(|why| eprintln!("{why}"));
+        assemble_file(&file_path)?;
     }
+
+    Ok(())
 }
 
 fn assemble_file(input_file_path: &PathBuf) -> Result<()> {
-    let instructions = parser::read_instructions(input_file_path).map_err(|why| {
-        anyhow!(
-            "Failed to parse instructions from file {}: {}",
-            input_file_path.display(),
-            why
+    let instructions = parser::read_instructions(input_file_path).with_context(|| {
+        format!(
+            "Failed to parse instructions from file: {}",
+            input_file_path.display()
         )
     })?;
 
+    let opcodes = code::generate_opcodes(&instructions)?;
+
     let output_file_path = input_file_path.with_extension(OUTPUT_FILE_EXT);
-    generate_output(&output_file_path, &instructions).map_err(|why| {
-        anyhow!(
-            "Failed to generate output file {}: {}",
-            output_file_path.display(),
-            why
+    let output_file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&output_file_path)?;
+
+    let mut output_buf = BufWriter::new(output_file);
+
+    write_opcodes(&opcodes, &mut output_buf).with_context(|| {
+        format!(
+            "Failed to generate output file: {}",
+            &output_file_path.display()
         )
     })?;
 
@@ -51,17 +57,9 @@ fn assemble_file(input_file_path: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn generate_output(output_file_path: &PathBuf, instructions: &[Instruction]) -> Result<()> {
-    let output_file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(output_file_path)?;
-    let mut output_buf = BufWriter::new(output_file);
-
-    let opcodes = code::generate_opcodes(instructions)?;
+fn write_opcodes<W: Write>(opcodes: &[u16], output_buf: &mut BufWriter<W>) -> Result<()> {
     for opcode in opcodes {
-        writeln!(&mut output_buf, "{opcode:016b}")?;
+        writeln!(output_buf, "{opcode:016b}")?;
     }
 
     output_buf.flush()?;

@@ -61,50 +61,70 @@ pub fn read_instructions(file_path: &PathBuf) -> Result<Vec<Instruction>> {
             },
 
             // everything else is a C instruction as we know comments and empty lines are ignored already
-            _ => {
-                let matches =
-                    comp_regex()
-                        .captures(line.as_str())
-                        .ok_or_else(|| InstructionError {
-                            line_number,
-                            kind: InstructionErrorKind::InvalidComp {
-                                comp: line.clone(),
-                            },
-                        })?;
-
-                Instruction {
-                    line_number,
-                    operator: OperatorKind::Comp {
-                        dest: matches.name(GRP_DEST).map_or(Ok(DestFlags::None), |m| {
-                            parse_dest_flags(m.as_str(), line_number)
-                        })?,
-                        comp: matches
-                            .name(GRP_COMP)
-                            .map_or(Ok(CompFlags::default()), |m| {
-                                CompFlags::from_name(m.as_str()).ok_or_else(|| InstructionError {
-                                    line_number,
-                                    kind: InstructionErrorKind::InvalidComp {
-                                        comp: m.as_str().to_string(),
-                                    },
-                                })
-                            })?,
-                        jump: matches.name(GRP_JUMP).map_or(Ok(JumpFlags::None), |m| {
-                            JumpFlags::from_name(m.as_str()).ok_or_else(|| InstructionError {
-                                line_number,
-                                kind: InstructionErrorKind::InvalidJump {
-                                    jump: m.as_str().to_string(),
-                                },
-                            })
-                        })?,
-                    },
-                }
-            }
+            _ => parse_comp_instruction(line_number, &line)?,
         };
 
         instructions.push(instruction);
     }
 
     Ok(instructions)
+}
+
+fn parse_comp_instruction(line_number: u32, line: &str) -> Result<Instruction> {
+    let matches = comp_regex()
+        .captures(line)
+        .ok_or_else(|| InstructionError {
+            line_number,
+            kind: InstructionErrorKind::InvalidComp {
+                comp: line.to_string(),
+            },
+        })?;
+
+    let instruction = Instruction {
+        line_number,
+        operator: OperatorKind::Comp {
+            dest: matches.name(GRP_DEST).map_or(Ok(DestFlags::None), |m| {
+                parse_dest_flags(m.as_str(), line_number)
+            })?,
+            comp: map_and_parse_flags_or_else(
+                &matches,
+                line_number,
+                GRP_COMP,
+                CompFlags::default(),
+                |comp| InstructionErrorKind::InvalidComp {
+                    comp: comp.to_string(),
+                },
+            )?,
+            jump: map_and_parse_flags_or_else(
+                &matches,
+                line_number,
+                GRP_JUMP,
+                JumpFlags::None,
+                |jump| InstructionErrorKind::InvalidJump {
+                    jump: jump.to_string(),
+                },
+            )?,
+        },
+    };
+
+    Ok(instruction)
+}
+
+/// If `matches` contains `match_name`, then attempt to parse the flags of `T`. If the parse fails then error.
+/// If the match does not exist, return `default`.
+fn map_and_parse_flags_or_else<T: bitflags::Flags, E: FnOnce(&str) -> InstructionErrorKind>(
+    matches: &regex::Captures<'_>,
+    line_number: u32,
+    match_name: &str,
+    default: T,
+    err: E,
+) -> Result<T> {
+    Ok(matches.name(match_name).map_or(Ok(default), |m| {
+        T::from_name(m.as_str()).ok_or_else(|| InstructionError {
+            line_number,
+            kind: err(m.as_str()),
+        })
+    })?)
 }
 
 /// Parses dest instruction as flags.
