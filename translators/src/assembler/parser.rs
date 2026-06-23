@@ -5,8 +5,8 @@ use std::io::{BufRead, BufReader, Lines};
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
-use crate::instructions::error::{InstructionError, InstructionErrorKind};
-use crate::instructions::{CompFlags, DestFlags, Instruction, JumpFlags, OperatorKind};
+use super::instructions::error::{InstructionError, InstructionErrorKind};
+use super::instructions::{CompFlags, DestFlags, Instruction, JumpFlags, OperatorKind};
 
 const SYM: char = '@';
 const LBL: char = '(';

@@ -1,14 +1,14 @@
 #![warn(clippy::pedantic)]
 
-mod code;
-mod instructions;
-mod parser;
+mod assembler;
 
 use anyhow::{Context, Result};
 use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
+
+use assembler::{code, parser};
 
 const INPUT_FILE_EXT: &str = "asm";
 const OUTPUT_FILE_EXT: &str = "hack";

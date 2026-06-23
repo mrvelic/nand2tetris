@@ -2,8 +2,8 @@ use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use crate::instructions::opcodes::OpcodeGenerator;
-use crate::instructions::{Instruction, OperatorKind};
+use super::instructions::opcodes::OpcodeGenerator;
+use super::instructions::{Instruction, OperatorKind};
 
 const RAM_START: u16 = 16;
 
