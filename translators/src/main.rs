@@ -1,73 +1,67 @@
 #![warn(clippy::pedantic)]
 
 mod assembler;
+mod instructions;
+mod vm_translator;
 
-use anyhow::{Context, Result};
-use std::env;
-use std::fs::{self, OpenOptions};
-use std::io::{BufWriter, Write};
-use std::path::PathBuf;
+use anyhow::Result;
+use clap::Parser;
+use std::{env, fs, path::PathBuf};
 
-use assembler::{code, parser};
+#[derive(clap::Parser)]
+#[command(version, about, long_about = None)]
+#[command(propagate_version = true)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
 
-const INPUT_FILE_EXT: &str = "asm";
-const OUTPUT_FILE_EXT: &str = "hack";
+#[derive(clap::Subcommand)]
+enum Commands {
+    /// Assemble hack asm files into hack binary files
+    Assemble {
+        /// Input file path to assemble.
+        input: PathBuf,
+        /// Output file path. If omitted, the output path will be the same as the input with a .hack extension.
+        output: Option<PathBuf>,
+    },
+    /// Translate jack VM commands into hack assembly
+    Translate {
+        /// Input file path to translate.
+        input: PathBuf,
+        /// Output file path. If omitted, the output path will be the same as the input with a .asm extension.
+        output: Option<PathBuf>,
+    },
+}
 
 fn main() -> Result<()> {
-    let current_dir = env::current_dir().expect("Working directory should be accessible.");
-    let asm_files = find_asm_files(current_dir)
-        .expect("Working directory should be possible to enumerate.")
-        .expect("Working directory should contain .asm files to process, or a path to an asm file should be passed as the first argument.");
+    let cli = Cli::parse();
 
-    for file_path in asm_files {
-        println!("Assembling file: {}", file_path.display());
-        assemble_file(&file_path)?;
+    match cli.command {
+        Commands::Assemble { input, output } => {
+            assembler::assemble_file(&input, output)?;
+        }
+        Commands::Translate { input, output } => {
+            vm_translator::translate_file(&input, output)?;
+        }
     }
 
-    Ok(())
-}
+    // let current_dir = env::current_dir().expect("Working directory should be accessible.");
 
-fn assemble_file(input_file_path: &PathBuf) -> Result<()> {
-    let instructions = parser::read_instructions(input_file_path).with_context(|| {
-        format!(
-            "Failed to parse instructions from file: {}",
-            input_file_path.display()
-        )
-    })?;
+    // let asm_files = find_asm_files(current_dir)
+    //     .expect("Working directory should be possible to enumerate.")
+    //     .expect("Working directory should contain .asm files to process, or a path to an asm file should be passed as the first argument.");
 
-    let opcodes = code::generate_opcodes(&instructions)?;
+    // for file_path in asm_files {
 
-    let output_file_path = input_file_path.with_extension(OUTPUT_FILE_EXT);
-    let output_file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(&output_file_path)?;
-
-    let mut output_buf = BufWriter::new(output_file);
-
-    write_opcodes(&opcodes, &mut output_buf).with_context(|| {
-        format!(
-            "Failed to generate output file: {}",
-            &output_file_path.display()
-        )
-    })?;
-
-    println!("Assembled into: {}", output_file_path.display());
-    Ok(())
-}
-
-fn write_opcodes<W: Write>(opcodes: &[u16], output_buf: &mut BufWriter<W>) -> Result<()> {
-    for opcode in opcodes {
-        writeln!(output_buf, "{opcode:016b}")?;
-    }
-
-    output_buf.flush()?;
+    // }
 
     Ok(())
 }
 
-fn find_asm_files(in_dir: PathBuf) -> Result<Option<Vec<PathBuf>>> {
+// TODO: Make this a more generic file list finder
+#[allow(unused)]
+fn find_files(in_dir: PathBuf, extension: &str) -> Result<Option<Vec<PathBuf>>> {
     let args: Vec<String> = env::args().collect();
 
     let files = match args.len() {
@@ -79,7 +73,7 @@ fn find_asm_files(in_dir: PathBuf) -> Result<Option<Vec<PathBuf>>> {
                 .filter_map(std::result::Result::ok)
                 .map(|entry| entry.path())
                 .filter_map(|path| {
-                    if path.extension().is_some_and(|ext| ext == INPUT_FILE_EXT) {
+                    if path.extension().is_some_and(|ext| ext == extension) {
                         Some(path)
                     } else {
                         None

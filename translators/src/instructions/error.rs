@@ -1,10 +1,11 @@
+#![allow(unused)]
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 #[error("[L: {line_number:?}] {kind:?}.")]
 pub struct InstructionError {
     pub line_number: u32,
-    pub kind: InstructionErrorKind, 
+    pub kind: InstructionErrorKind,
 }
 
 #[derive(Debug, Error)]

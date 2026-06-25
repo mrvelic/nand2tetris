@@ -1,16 +1,20 @@
+#![allow(unused)]
 use anyhow::Result;
 use regex::Regex;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Lines};
+use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::OnceLock;
 
-use super::instructions::error::{InstructionError, InstructionErrorKind};
-use super::instructions::{CompFlags, DestFlags, Instruction, JumpFlags, OperatorKind};
+use crate::instructions::error::{InstructionError, InstructionErrorKind};
+use crate::instructions::{
+    CompFlags, DestFlags, Instruction, Instructions, JumpFlags, OperatorKind,
+};
 
-const SYM: char = '@';
-const LBL: char = '(';
-const END_LBL: char = ')';
+pub const SYM: char = '@';
+pub const LBL: char = '(';
+pub const END_LBL: char = ')';
 
 const GRP_DEST: &str = "dest";
 const GRP_COMP: &str = "comp";
@@ -24,12 +28,14 @@ fn comp_regex() -> &'static Regex {
     })
 }
 
-pub fn read_instructions(file_path: &PathBuf) -> Result<Vec<Instruction>> {
-    let mut reader = BufReader::new(File::open(file_path)?).lines();
+pub fn read_instructions<'src>(file_path: &PathBuf) -> Result<Instructions> {
+    let mut reader = BufReader::new(File::open(file_path)?);
     let mut instructions: Vec<Instruction> = Vec::new();
     let mut line_number = 0;
 
-    while let Some(line) = read_until_relevant_line(&mut reader, &mut line_number)? {
+    let mut line = String::new();
+
+    while let Some(()) = read_until_relevant_line(&mut reader, &mut line_number, &mut line)? {
         // match the first character of each line
         let instruction = match line.chars().next().unwrap_or_default() {
             // '@' instruction (@SYM or @1234 (address))
@@ -38,13 +44,11 @@ pub fn read_instructions(file_path: &PathBuf) -> Result<Vec<Instruction>> {
                 match symbol.parse::<u16>() {
                     Ok(address) => Instruction {
                         line_number,
-                        operator: OperatorKind::Address { address },
+                        operator: OperatorKind::Address(address),
                     },
                     Err(_) => Instruction {
                         line_number,
-                        operator: OperatorKind::Symbol {
-                            symbol: symbol.to_string(),
-                        },
+                        operator: OperatorKind::Symbol(symbol.to_string()),
                     },
                 }
             }
@@ -52,12 +56,11 @@ pub fn read_instructions(file_path: &PathBuf) -> Result<Vec<Instruction>> {
             // '(LABEL)' instruction
             LBL => Instruction {
                 line_number,
-                operator: OperatorKind::Label {
-                    label: line
-                        .trim_start_matches(LBL)
+                operator: OperatorKind::Label(
+                    line.trim_start_matches(LBL)
                         .trim_end_matches(END_LBL)
                         .to_string(),
-                },
+                ),
             },
 
             // everything else is a C instruction as we know comments and empty lines are ignored already
@@ -67,7 +70,7 @@ pub fn read_instructions(file_path: &PathBuf) -> Result<Vec<Instruction>> {
         instructions.push(instruction);
     }
 
-    Ok(instructions)
+    Ok(Instructions(instructions))
 }
 
 fn parse_comp_instruction(line_number: u32, line: &str) -> Result<Instruction> {
@@ -82,11 +85,11 @@ fn parse_comp_instruction(line_number: u32, line: &str) -> Result<Instruction> {
 
     let instruction = Instruction {
         line_number,
-        operator: OperatorKind::Comp {
-            dest: matches.name(GRP_DEST).map_or(Ok(DestFlags::None), |m| {
+        operator: OperatorKind::Comp(
+            matches.name(GRP_DEST).map_or(Ok(DestFlags::None), |m| {
                 parse_dest_flags(m.as_str(), line_number)
             })?,
-            comp: map_and_parse_flags_or_else(
+            map_and_parse_flags_or_else(
                 &matches,
                 line_number,
                 GRP_COMP,
@@ -95,7 +98,7 @@ fn parse_comp_instruction(line_number: u32, line: &str) -> Result<Instruction> {
                     comp: comp.to_string(),
                 },
             )?,
-            jump: map_and_parse_flags_or_else(
+            map_and_parse_flags_or_else(
                 &matches,
                 line_number,
                 GRP_JUMP,
@@ -104,7 +107,7 @@ fn parse_comp_instruction(line_number: u32, line: &str) -> Result<Instruction> {
                     jump: jump.to_string(),
                 },
             )?,
-        },
+        ),
     };
 
     Ok(instruction)
@@ -112,15 +115,15 @@ fn parse_comp_instruction(line_number: u32, line: &str) -> Result<Instruction> {
 
 /// If `matches` contains `match_name`, then attempt to parse the flags of `T`. If the parse fails then error.
 /// If the match does not exist, return `default`.
-fn map_and_parse_flags_or_else<T: bitflags::Flags, E: FnOnce(&str) -> InstructionErrorKind>(
-    matches: &regex::Captures<'_>,
+fn map_and_parse_flags_or_else<'src, T: FromStr, E: FnOnce(&'src str) -> InstructionErrorKind>(
+    matches: &regex::Captures<'src>,
     line_number: u32,
-    match_name: &str,
+    match_name: &'src str,
     default: T,
     err: E,
 ) -> Result<T> {
     Ok(matches.name(match_name).map_or(Ok(default), |m| {
-        T::from_name(m.as_str()).ok_or_else(|| InstructionError {
+        T::from_str(m.as_str()).map_err(|_| InstructionError {
             line_number,
             kind: err(m.as_str()),
         })
@@ -136,7 +139,7 @@ fn map_and_parse_flags_or_else<T: bitflags::Flags, E: FnOnce(&str) -> Instructio
 /// 'DM'  -> ['D', 'M']      -> DestFlags::D | DestFlags::M                -> 0b011
 /// 'ADM' -> ['A', 'D', 'M'] -> DestFlags::A | DestFlags::D | DestFlags::M -> 0b111
 /// ```
-fn parse_dest_flags(dest: &str, line_number: u32) -> Result<DestFlags> {
+fn parse_dest_flags<'src>(dest: &'src str, line_number: u32) -> Result<DestFlags> {
     let mut dest_val = DestFlags::None;
     for c in dest.chars() {
         let parsed_flags =
@@ -155,15 +158,15 @@ fn parse_dest_flags(dest: &str, line_number: u32) -> Result<DestFlags> {
 
 /// Consumes the reader line by line, performing a trim on each line, then ignoring any comments (// prefix) or empty lines.
 ///
-/// Returns the first non-empty, non-comment line. Returns `None` if there are no more lines.
-fn read_until_relevant_line(
-    reader: &mut Lines<BufReader<File>>,
-    line_count: &mut u32,
-) -> Result<Option<String>> {
-    for line in reader {
+/// Returns `Some` on the first non-empty, non-comment line. Returns `None` if there are no more lines.
+fn read_until_relevant_line<'src>(
+    reader: &'src mut BufReader<File>,
+    line_count: &'src mut u32,
+    line: &'src mut String,
+) -> Result<Option<()>> {
+    while reader.read_line(line)? > 0 {
         *line_count += 1;
-
-        let line = line?.trim().to_string();
+        let line = line.trim();
 
         if line.starts_with("//") {
             continue;
@@ -172,7 +175,7 @@ fn read_until_relevant_line(
             continue;
         }
 
-        return Ok(Some(line));
+        return Ok(Some(()));
     }
 
     Ok(None)

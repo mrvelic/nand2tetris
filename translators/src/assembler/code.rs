@@ -2,8 +2,7 @@ use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use super::instructions::opcodes::OpcodeGenerator;
-use super::instructions::{Instruction, OperatorKind};
+use crate::instructions::{Instruction, OperatorKind, opcodes::OpcodeGenerator};
 
 const RAM_START: u16 = 16;
 
@@ -47,7 +46,7 @@ pub fn generate_opcodes(instructions: &[Instruction]) -> Result<Vec<u16>> {
     let mut opcodes = Vec::<u16>::new();
 
     for i in instructions {
-        if let Some(opcode) = i.get_opcode(&symbols)? {
+        if let Some(opcode) = i.operator.get_opcode(&symbols)? {
             opcodes.push(opcode);
         }
     }
@@ -60,13 +59,11 @@ fn extract_symbols(instructions: &[Instruction]) -> HashMap<&str, u16> {
     let mut ram_pos: u16 = RAM_START;
     let mut pc: u16 = 0; // program counter
 
-    //let operators = instructions.iter().map(|i| &i.operator).collect::<Vec<_>>();
-
     // first pass: find all labels
     for i in instructions {
         // labels point at the next instruction but are not instructions themselves
         // so do not increment the program counter
-        if let OperatorKind::Label { label: symbol } = &i.operator {
+        if let OperatorKind::Label(symbol) = &i.operator {
             if !symbols.contains_key(symbol.as_str()) {
                 symbols.insert(symbol, pc);
             }
@@ -77,7 +74,7 @@ fn extract_symbols(instructions: &[Instruction]) -> HashMap<&str, u16> {
 
     // second pass: find all variables (address instructions that dont reference a label or base symbol)
     for i in instructions {
-        if let OperatorKind::Symbol { symbol } = &i.operator
+        if let OperatorKind::Symbol(symbol) = &i.operator
             && !base_symbols().contains_key(symbol.as_str())
             && !symbols.contains_key(symbol.as_str())
         {
