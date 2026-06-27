@@ -22,3 +22,5 @@ target
 
 # nand2tetris
 6/*/*.hack
+7/**/*.asm
+7/**/*.hack

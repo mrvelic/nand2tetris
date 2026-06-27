@@ -1,3 +1,4 @@
+pub mod base_symbols;
 pub mod error;
 pub mod flags;
 pub mod opcodes;
@@ -62,7 +63,7 @@ impl std::fmt::Display for Instructions {
 
 impl std::fmt::Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let op = &self.operator.to_asm();
+        let op = &self.operator;
         write!(f, "{op}")
     }
 }

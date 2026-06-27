@@ -1,46 +1,16 @@
 use anyhow::Result;
 use std::collections::HashMap;
-use std::sync::OnceLock;
 
-use crate::instructions::{Instruction, OperatorKind, opcodes::OpcodeGenerator};
-
-const RAM_START: u16 = 16;
-
-fn base_symbols() -> &'static HashMap<&'static str, u16> {
-    static BASE_SYMBOLS: OnceLock<HashMap<&'static str, u16>> = OnceLock::new();
-    BASE_SYMBOLS.get_or_init(|| {
-        HashMap::from([
-            ("SCREEN", 16384),
-            ("KBD", 24576),
-            ("SP", 0),
-            ("LCL", 1),
-            ("ARG", 2),
-            ("THIS", 3),
-            ("THAT", 4),
-            ("R0", 0),
-            ("R1", 1),
-            ("R2", 2),
-            ("R3", 3),
-            ("R4", 4),
-            ("R5", 5),
-            ("R6", 6),
-            ("R7", 7),
-            ("R8", 8),
-            ("R9", 9),
-            ("R10", 10),
-            ("R11", 11),
-            ("R12", 12),
-            ("R13", 13),
-            ("R14", 14),
-            ("R15", 15),
-        ])
-    })
-}
+use crate::instructions::{
+    Instruction, OperatorKind,
+    base_symbols::{self, RAM_START},
+    opcodes::OpcodeGenerator,
+};
 
 pub fn generate_opcodes(instructions: &[Instruction]) -> Result<Vec<u16>> {
     // first pass: find all labels and non-base symbols
     let mut symbols = extract_symbols(instructions);
-    symbols.extend(base_symbols());
+    symbols.extend(base_symbols::by_name());
 
     // now generate the code for each instruction
     let mut opcodes = Vec::<u16>::new();
@@ -75,7 +45,7 @@ fn extract_symbols(instructions: &[Instruction]) -> HashMap<&str, u16> {
     // second pass: find all variables (address instructions that dont reference a label or base symbol)
     for i in instructions {
         if let OperatorKind::Symbol(symbol) = &i.operator
-            && !base_symbols().contains_key(symbol.as_str())
+            && !base_symbols::by_name().contains_key(symbol.as_str())
             && !symbols.contains_key(symbol.as_str())
         {
             symbols.insert(symbol, ram_pos);
