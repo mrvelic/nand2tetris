@@ -19,11 +19,10 @@ use helpers::*;
 use parser::Command;
 
 pub fn translate_file(input: &PathBuf, output: Option<PathBuf>) -> Result<()> {
-    let var_name = input
+    let program_name = input
         .file_prefix()
         .with_context(|| "Should be able to read a file name from the path")?
         .to_str().with_context(|| "Should be able to convert the file name to a normal string for use as the program name")?;
-    let program_name = var_name;
 
     let src = fs::read_to_string(input).with_context(|| "Should read from file")?;
     let (result, errs) = parser::parser().parse(src.trim()).into_output_errors();
