@@ -41,7 +41,7 @@ mod tests {
 
     #[test]
     fn it_should_return_comp_opcode_bits() {
-        let result = get_comp_opcode(&CompFlags::False, &DestFlags::D, &JumpFlags::JMP);
+        let result = get_comp_opcode(&CompFlags::Zero, &DestFlags::D, &JumpFlags::JMP);
         assert_eq!(result, 0b1_110_101_010_010_111);
     }
 }

@@ -47,10 +47,12 @@ pub enum JumpFlags {
 #[derive(Display, Debug, Copy, Clone, PartialEq, Eq, EnumString, FromRepr)]
 pub enum CompFlags {
     // a = 0
+    /// Zero (or False)
     #[strum(serialize = "0")]
-    False = 0b10_1010,
+    Zero = 0b10_1010,
     #[strum(serialize = "1")]
-    True = 0b11_1111,
+    One = 0b11_1111,
+    /// -1 (or True)
     #[strum(serialize = "-1")]
     Neg1 = 0b11_1010,
     D = 0b00_1100,

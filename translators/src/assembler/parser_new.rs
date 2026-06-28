@@ -138,7 +138,7 @@ mod tests {
 
         assert_eq!(
             result[0],
-            OperatorKind::Comp(DestFlags::None, CompFlags::False, JumpFlags::JMP)
+            OperatorKind::Comp(DestFlags::None, CompFlags::Zero, JumpFlags::JMP)
         );
     }
 

@@ -1,3 +1,5 @@
+mod helpers;
+mod labels;
 pub mod parser;
 
 use anyhow::{Context, Result};
@@ -9,76 +11,88 @@ use std::{
     path::PathBuf,
 };
 
-use crate::{
-    instructions::{
-        CompFlags as Cmp, DestFlags as Dst, JumpFlags as Jmp, OperatorKind as Op, base_symbols,
-        base_symbols::*,
-    },
-    vm_translator::parser::{Command, Segment},
+use crate::instructions::{
+    CompFlags as Cmp, DestFlags as Dst, JumpFlags as Jmp, OperatorKind as Op, base_symbols::*,
 };
 
+use helpers::*;
+use parser::Command;
+
 pub fn translate_file(input: &PathBuf, output: Option<PathBuf>) -> Result<()> {
+    let var_name = input
+        .file_prefix()
+        .with_context(|| "Should be able to read a file name from the path")?
+        .to_str().with_context(|| "Should be able to convert the file name to a normal string for use as the program name")?;
+    let program_name = var_name;
+
     let src = fs::read_to_string(input).with_context(|| "Should read from file")?;
     let (result, errs) = parser::parser().parse(src.trim()).into_output_errors();
 
-    println!("{result:#?}");
-
-    let addrs = by_address();
-    println!("{addrs:#?}");
-
-    for e in errs {
-        Report::build(ReportKind::Error, ((), e.span().into_range()))
-            .with_config(ariadne::Config::new().with_index_type(ariadne::IndexType::Byte))
-            .with_message(e.to_string())
-            .with_label(
-                Label::new(((), e.span().into_range()))
-                    .with_message(e.reason().to_string())
-                    .with_color(Color::Red),
-            )
-            .finish()
-            .print(Source::from(&src))?;
-    }
+    report_errors(&src, errs)?;
 
     let mut ops = Vec::<Op>::new();
 
-    match result {
-        Some(commands) => {
-            for command in commands {
-                translate_command(&mut ops, command);
-            }
+    // base code segments
+    ops.extend(setup_segment());
+    ops.extend(bool_stack_compare(labels::EQ, labels::EQ_RET, Jmp::JNE));
+    ops.extend(bool_stack_compare(labels::LT, labels::LT_RET, Jmp::JGE));
+    ops.extend(bool_stack_compare(labels::GT, labels::GT_RET, Jmp::JLE));
+
+    // write translated commands
+    ops.push(lbl(labels::CODE));
+    if let Some(commands) = result {
+        let mut index: u32 = 0;
+        for command in commands {
+            translate_command(program_name, &mut ops, index, command);
+            index += 1;
         }
-        None => {}
     }
 
     // infinite end loop
     ops.extend([
-        Op::Label("END".to_string()),
-        Op::Symbol("END".to_string()),
-        ij(Cmp::False, Jmp::JMP),
+        lbl(labels::END),
+        lbl_sym(labels::END),
+        ij(Cmp::Zero, Jmp::JMP),
     ]);
 
+    write_output_file(input, output, ops)?;
+
+    Ok(())
+}
+
+fn write_output_file(
+    input: &PathBuf,
+    output: Option<PathBuf>,
+    ops: Vec<Op>,
+) -> Result<(), anyhow::Error> {
     let output_file_path = output.unwrap_or_else(|| input.with_extension("asm"));
     let output_file = OpenOptions::new()
         .create(true)
         .write(true)
         .truncate(true)
-        .open(&output_file_path)?;
+        .open(&output_file_path)
+        .with_context(|| format!("Need to open {output_file_path:?} for writing."))?;
 
     let mut output_buf = BufWriter::new(output_file);
-
     for o in ops {
         writeln!(output_buf, "{o}")?;
     }
 
     output_buf.flush()?;
-
     Ok(())
 }
 
-fn translate_command(ops: &mut Vec<Op>, command: Command) {
+fn translate_command<'name>(
+    program_name: &'name str,
+    ops: &mut Vec<Op>,
+    index: u32,
+    command: Command,
+) {
     match command {
         Command::Push(segment, value) => {
-            load_addr(ops, segment, value);
+            if move_to_addr(program_name, ops, segment, value) {
+                ops.push(i(Dst::D, Cmp::M));
+            }
 
             ops.extend(push_stack());
         }
@@ -90,7 +104,7 @@ fn translate_command(ops: &mut Vec<Op>, command: Command) {
             ops.push(i(Dst::M, Cmp::D));
 
             // move to the address for the segment
-            load_addr(ops, segment, value);
+            move_to_addr(program_name, ops, segment, value);
 
             // store the address of the target segment in D
             ops.push(i(Dst::D, Cmp::A));
@@ -105,7 +119,7 @@ fn translate_command(ops: &mut Vec<Op>, command: Command) {
             ops.push(sym(R14));
             ops.push(i(Dst::A, Cmp::M));
 
-            // store the poped value at the target
+            // store the popped value at the target
             ops.push(i(Dst::M, Cmp::D));
         }
         Command::Add => {
@@ -114,15 +128,11 @@ fn translate_command(ops: &mut Vec<Op>, command: Command) {
         }
         Command::Subtract => {
             ops.extend(pop_stack());
-            ops.push(i(Dst::M, Cmp::DNegM));
+            ops.push(i(Dst::M, Cmp::MNegD));
         }
-        Command::Equal => {
-            ops.extend(pop_stack());
-            ops.push(i(Dst::D, Cmp::DNegM));
-            ops.push(i(Dst::D, Cmp::NotD));
-            ops.push(i(Dst::M, Cmp::True));
-            ops.push(i(Dst::M, Cmp::DAndM));
-        }
+        Command::Equal => ops.extend(do_bool_compare(labels::EQ, index)),
+        Command::LessThan => ops.extend(do_bool_compare(labels::LT, index)),
+        Command::GreaterThan => ops.extend(do_bool_compare(labels::GT, index)),
         Command::Or => {
             ops.extend(pop_stack());
             ops.push(i(Dst::M, Cmp::DOrM));
@@ -132,73 +142,28 @@ fn translate_command(ops: &mut Vec<Op>, command: Command) {
             ops.push(i(Dst::M, Cmp::DAndM));
         }
         Command::Not => {
-            ops.extend([sym(SP), i(Dst::A, Cmp::ANeg1), i(Dst::M, Cmp::NotM)]);
+            ops.extend([sym(SP), i(Dst::A, Cmp::MNeg1), i(Dst::M, Cmp::NotM)]);
         }
         Command::Negate => {
-            ops.extend([sym(SP), i(Dst::A, Cmp::ANeg1), i(Dst::M, Cmp::NegM)]);
+            ops.extend([sym(SP), i(Dst::A, Cmp::MNeg1), i(Dst::M, Cmp::NegM)]);
         }
-        _ => {}
     }
 }
 
-fn load_addr(ops: &mut Vec<Op>, segment: Segment, value: u16) {
-    let addr = match segment {
-        Segment::Argument => Some(ARG),
-        Segment::Local => Some(LCL),
-        Segment::Static => Some(RAM_START),
-        Segment::This => Some(THIS),
-        Segment::That => Some(THAT),
-        Segment::Temp => {
-            ops.push(sym(TEMP + value));
-            return;
-        }
-        _ => None,
-    };
-
-    // set index value as D
-    ops.extend([val(value), i(Dst::D, Cmp::A)]);
-
-    if let Some(addr) = addr {
-        ops.push(sym(addr));
-        ops.push(i(Dst::A, Cmp::DPlusM));
-    }
-}
-
-/// increment SP and store D into M at its address
-fn push_stack() -> [Op; 4] {
-    [
-        sym(SP),
-        i(Dst::A | Dst::M, Cmp::MPlus1),
-        i(Dst::A, Cmp::ANeg1),
-        i(Dst::M, Cmp::D),
-    ]
-}
-
-/// decrement SP and store M at its address in D
-fn pop_stack() -> [Op; 4] {
-    [
-        sym(SP),
-        i(Dst::A | Dst::M, Cmp::MNeg1),
-        i(Dst::D, Cmp::M),
-        i(Dst::A, Cmp::ANeg1),
-    ]
-}
-
-fn val(value: u16) -> Op {
-    Op::Address(value)
-}
-
-fn sym(sym_address: u16) -> Op {
-    match base_symbols::by_address().get(&sym_address) {
-        Some(symbol) => Op::Symbol(symbol.to_string()),
-        None => Op::Address(sym_address),
-    }
-}
-
-fn i(dest: Dst, comp: Cmp) -> Op {
-    Op::Comp(dest, comp, Jmp::None)
-}
-
-fn ij(comp: Cmp, jump: Jmp) -> Op {
-    Op::Comp(Dst::None, comp, jump)
+fn report_errors<'src>(
+    src: &'src str,
+    errs: Vec<chumsky::prelude::Rich<'src, char>>,
+) -> Result<(), anyhow::Error> {
+    Ok(for e in errs {
+        Report::build(ReportKind::Error, ((), e.span().into_range()))
+            .with_config(ariadne::Config::new().with_index_type(ariadne::IndexType::Byte))
+            .with_message(e.to_string())
+            .with_label(
+                Label::new(((), e.span().into_range()))
+                    .with_message(e.reason().to_string())
+                    .with_color(Color::Red),
+            )
+            .finish()
+            .print(Source::from(src))?;
+    })
 }
